@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Midori's Music Shop - Catálogo C2C</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <h1>🎸 Midori's Music Shop <span id="user-badge" class="badge"></span></h1>
+        <div class="header-right">
+            <div id="cart-summary" class="cart-box">
+                <span>Itens: <strong id="cart-count">0</strong></span>
+                <span>Total: R$ <strong id="cart-total">0.00</strong></span>
+            </div>
+            <button id="btn-logout" class="logout-btn">Sair</button>
+        </div>
+    </header>
+
+    <main>
+        <!-- Painel exclusivo para Vendedores -->
+        <section id="seller-panel" class="seller-section" style="display: none;">
+            <h2>📦 Anunciar Novo Instrumento / Equipamento</h2>
+            <form id="form-add-product" class="product-form">
+                <div class="input-group">
+                    <label for="prod-name">Nome do Produto</label>
+                    <input type="text" id="prod-name" placeholder="Ex: Guitarra Les Paul" required>
+                </div>
+                <div class="input-group">
+                    <label for="prod-price">Preço (R$)</label>
+                    <input type="number" id="prod-price" step="0.01" placeholder="0.00" required>
+                </div>
+                <div class="input-group">
+                    <label for="prod-category">Categoria</label>
+                    <input type="text" id="prod-category" placeholder="Ex: Cordas, Teclados, Amplificadores" required>
+                </div>
+                <div class="input-group">
+                    <label for="prod-image">URL da Imagem</label>
+                    <input type="url" id="prod-image" placeholder="https://exemplo.com/foto.jpg" required>
+                </div>
+                <button type="submit" class="glow-btn">Publicar Anúncio</button>
+            </form>
+        </section>
+
+        <div class="shop-grid">
+            <section>
+                <h2>Catálogo C2C (Disponíveis)</h2>
+                <div id="product-list" class="grid"></div>
+            </section>
+
+            <section>
+                <h2>Carrinho de Compras</h2>
+                <ul id="cart-items">
+                    <li>O carrinho está vazio.</li>
+                </ul>
+            </section>
+        </div>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
