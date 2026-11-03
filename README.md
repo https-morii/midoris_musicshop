@@ -2,7 +2,7 @@
 
 ⚡ Midori’s Music Shop - C2C Audio Shop ★🎸🎧⋆｡ °⋆
 
-Projeto acadêmico desenvolvido para a Fatec Mauá, consistindo em uma plataforma de e-commerce no modelo C2C (Consumer to Consumer) voltada para a compra e venda de instrumentos e equipamentos musicais. O projeto utiliza uma identidade visual única inspirada na estética Frutiger Aero (elementos translúcidos e efeito de vidro/glassmorphism) combinada com o estilo Nu Metal (tons escuros e visuais industriais), utilizando uma paleta em verde futurista (neon/cyber-glass).
+Projeto acadêmico desenvolvido por Mirella Fernandes e Rafaela Veloso, consistindo em uma plataforma de e-commerce no modelo C2C (Consumer to Consumer) voltada para a compra e venda de instrumentos e equipamentos musicais. O projeto utiliza uma identidade visual única inspirada na estética Frutiger Aero (elementos translúcidos e efeito de vidro/glassmorphism) combinada com o estilo Nu Metal (tons escuros e visuais industriais), utilizando uma paleta em verde futurista (neon/cyber-glass).
 
 ## 🚀 Tecnologias Utilizadas
 
