@@ -1,0 +1,184 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Midori's Music Shop - Painel do Utilizador</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Painel lateral -->
+    <aside class="sidebar">
+        <div>
+            <div class="sidebar-header">
+                <h2>🎸 Midori's Shop</h2>
+            </div>
+            <div class="sidebar-menu">
+                <button id="menu-home" class="sidebar-btn active" onclick="mudarAba('home')">🏠 Início / Home</button>
+                <button id="menu-perfil" class="sidebar-btn" onclick="mudarAba('perfil')">👤 Alterar Perfil</button>
+                <button id="menu-config" class="sidebar-btn" onclick="mudarAba('configuracoes')">⚙️ Configurações da Conta</button>
+            </div>
+        </div>
+        <div class="sidebar-footer">
+            <button class="sidebar-btn" onclick="fazerLogout()" style="color: #ff5555;">🚪 Sair da Conta</button>
+        </div>
+    </aside>
+
+    <!-- Conteúdo principal -->
+    <div class="main-content">
+        <header>
+            <h1>Painel da Loja <span id="user-badge" class="badge"></span></h1>
+            <div class="header-right">
+                <div id="cart-summary" class="cart-box">
+                    <span>Itens: <strong id="cart-count">0</strong></span>
+                    <span>Total: R$ <strong id="cart-total">0.00</strong></span>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <!-- ABA 1: HOME (Loja e Painel Vendedor) -->
+            <section id="aba-home">
+                <!-- Painel exclusivo para Vendedores -->
+                <section id="seller-panel" class="seller-section" style="display: none; margin-bottom: 30px;">
+                    <h2>Painel do Vendedor</h2>
+                    <div class="seller-actions" style="margin-top: 15px;">
+                        <button id="btn-toggle-add" class="glow-btn">➕ Anunciar Novo Produto</button>
+                        <button id="btn-toggle-my-products" class="glow-btn">📦 Meus Produtos Anunciados</button>
+                    </div>
+
+                    <div id="section-add-product" class="hidden" style="margin-top: 20px;">
+                        <h3>Novo Anúncio</h3>
+                        <form id="form-add-product" class="product-form" style="margin-top: 15px;">
+                            <div class="input-group">
+                                <label for="prod-name">Nome do Produto</label>
+                                <input type="text" id="prod-name" placeholder="Ex: Guitarra Les Paul" required>
+                            </div>
+                            <div class="input-group">
+                                <label for="prod-price">Preço (R$)</label>
+                                <input type="number" id="prod-price" step="0.01" placeholder="0.00" required>
+                            </div>
+                            <div class="input-group">
+                                <label for="prod-category">Categoria</label>
+                                <input type="text" id="prod-category" placeholder="Ex: Cordas, Teclados" required>
+                            </div>
+                            <div class="input-group">
+                                <label for="prod-image-file">Imagem do Produto</label>
+                                <input type="file" id="prod-image-file" accept="image/*" required>
+                            </div>
+                            <button type="submit" class="glow-btn">Publicar Anúncio</button>
+                        </form>
+                    </div>
+
+                    <div id="section-my-products" class="hidden" style="margin-top: 20px;">
+                        <h3>Os Meus Produtos</h3>
+                        <div id="my-products-list" class="grid" style="margin-top: 15px;"></div>
+                    </div>
+                </section>
+
+                <div class="shop-grid">
+                    <section>
+                        <h2>Catálogo C2C (Disponíveis)</h2>
+                        <div id="product-list" class="grid"></div>
+                    </section>
+
+                    <section>
+                        <h2>Carrinho de Compras</h2>
+                        <ul id="cart-items" style="list-style: none; padding: 0; margin-top: 10px;">
+                            <li>O carrinho está vazio.</li>
+                        </ul>
+                        <div style="margin-top: 20px;">
+                            <button id="btn-finalizar" onclick="finalizarCompra()" class="glow-btn" style="display: none;">Finalizar Compra</button>
+                        </div>
+                    </section>
+                </div>
+            </section>
+
+            <!-- ABA 2: Alterar perfil -->
+            <section id="aba-perfil" class="hidden">
+                <div class="form-panel">
+                    <h2>Alterar Perfil</h2>
+                    <p style="color: #888; margin-bottom: 20px; font-size: 0.9rem;">Atualize as suas informações pessoais abaixo.</p>
+                    <form id="form-alterar-perfil">
+                        <div class="input-group">
+                            <label for="perfil-nome">Nome de Usuário</label>
+                            <input type="text" id="perfil-nome" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="perfil-telefone">Telefone</label>
+                            <input type="tel" id="perfil-telefone" placeholder="Ex: (11) 99999-9999">
+                        </div>
+                        <div class="input-group">
+                            <label for="perfil-estado">Estado</label>
+                            <input type="text" id="perfil-estado" placeholder="Ex: São Paulo">
+                        </div>
+                        <div class="input-group">
+                            <label for="perfil-cidade">Cidade</label>
+                            <input type="text" id="perfil-cidade" placeholder="Ex: São Paulo">
+                        </div>
+                        <div class="input-group">
+                            <label for="perfil-bairro">Bairro</label>
+                            <input type="text" id="perfil-bairro" placeholder="Ex: Centro">
+                        </div>
+                        <div class="input-group">
+                            <label for="perfil-genero">Gênero</label>
+                            <select id="perfil-genero">
+                                <option value="">Selecione...</option>
+                                <option value="Masculino">Masculino</option>
+                                <option value="Feminino">Feminino</option>
+                                <option value="Outro">Outro</option>
+                                <option value="Prefiro não informar">Prefiro não informar</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="glow-btn" style="margin-top: 10px;">Salvar Alterações</button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- ABA 3: Configurações da conta -->
+            <section id="aba-configuracoes" class="hidden">
+                <div class="form-panel">
+                    <h2>Configurações da Conta</h2>
+                    <p style="color: #888; margin-bottom: 20px; font-size: 0.9rem;">Gerencie a segurança e o status da sua conta.</p>
+                    
+                    <!-- Alterar Senha -->
+                    <div class="config-box">
+                        <h3>Trocar Senha</h3>
+                        <form id="form-trocar-senha">
+                            <div class="input-group">
+                                <label for="senha-atual">Senha Anterior</label>
+                                <input type="password" id="senha-atual" placeholder="Digite sua senha atual" required>
+                            </div>
+                            <div class="input-group">
+                                <label for="senha-nova">Nova Senha</label>
+                                <input type="password" id="senha-nova" placeholder="Digite a nova senha" required>
+                            </div>
+                            <div class="input-group">
+                                <label for="senha-nova-confirmacao">Confirmar Nova Senha</label>
+                                <input type="password" id="senha-nova-confirmacao" placeholder="Digite a nova senha novamente" required>
+                            </div>
+                            <button type="submit" class="glow-btn">Atualizar Senha</button>
+                        </form>
+                    </div>
+
+                    <!-- Zona de Perigo / Excluir Conta -->
+                    <div class="config-box" style="border-color: #ff5555;">
+                        <h3 style="color: #ff5555;">Excluir Conta</h3>
+                        <p style="color: #aaa; font-size: 0.85rem; margin-bottom: 15px;">Esta ação é permanente e apagará todos os seus dados e anúncios do sistema.</p>
+                        <form id="form-excluir-conta">
+                            <div class="input-group">
+                                <label for="senha-excluir">Confirme sua senha para excluir</label>
+                                <input type="password" id="senha-excluir" placeholder="Digite sua senha" required>
+                            </div>
+                            <button type="submit" class="danger-btn">Excluir Minha Conta</button>
+                        </form>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js" defer></script>
+</body>
+</html>
