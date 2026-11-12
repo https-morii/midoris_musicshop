@@ -9,7 +9,16 @@ async function bootstrap(): Promise<void> {
   mkdirSync(dirname(databasePath), { recursive: true });
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api');
-  app.enableCors({ origin: true });
+  app.enableCors({
+    origin: [
+      /^https:\/\/[a-z0-9-]+-8000\.app\.github\.dev$/i,
+      /^http:\/\/localhost(?::\d+)?$/i,
+      /^http:\/\/127\.0\.0\.1(?::\d+)?$/i,
+    ],
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    optionsSuccessStatus: 204,
+  });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
   const port = Number(process.env.PORT ?? 3000);
   await app.listen(port, '0.0.0.0');
