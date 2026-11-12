@@ -1,38 +1,23 @@
-# Midori's Music Shop — Backend e execução
+# Execução local — Midori's Music Shop
 
-Agora a branch `rafaela` contém o frontend e a API NestJS + TypeScript com SQLite. Cadastros, anúncios e carrinho são persistidos no banco `backend/data/midori.sqlite`; o LocalStorage guarda somente token de autenticação e produto selecionado.
+Esta branch (`feat/localstorage-frontend`) executa a aplicação inteiramente no navegador: cadastro/login, perfis, produtos e carrinhos são guardados no `localStorage` do navegador. Não é necessário iniciar o backend nem encaminhar a porta 3000.
 
-## Executar no Codespaces
+## Como testar no Codespaces
 
-Abra dois terminais no Codespace.
-
-**Terminal 1 — backend:**
+Na raiz do repositório, rode apenas o servidor estático:
 
 ```bash
-cd backend
-cp .env.example .env
-# Recomendado: edite .env e configure um JWT_SECRET longo e aleatório.
-npm install
-npm run start:dev
-```
-
-Aguarde a mensagem de inicialização e encaminhe a porta `3000` na aba **Ports** do Codespaces.
-
-**Terminal 2 — frontend**, na raiz do repositório:
-
-```bash
-npx tsc app.ts --target es2015 --module none
 python3 -m http.server 8000 --bind 0.0.0.0
 ```
 
-Encaminhe a porta `8000` e abra a URL do frontend. O aplicativo deriva o endereço da API trocando `-8000.` por `-3000.` no domínio do Codespaces; localmente usa a porta 3000.
+Abra a URL da porta **8000** na aba **Ports** do Codespace. Não execute `npm run start:dev`; a API NestJS não é usada por esta branch.
 
-## Teste
+## Fluxo de teste
 
-1. Cadastre uma conta com perfil **Vendedor** e senha de pelo menos 8 caracteres.
-2. Anuncie um produto com imagem até 3 MB.
-3. Em outro perfil/navegador, crie um **Comprador**, entre na conta e adicione o produto ao carrinho.
-4. Encerre e reinicie o backend; os usuários, anúncios e itens do carrinho permanecem no SQLite.
-5. O banco aparece em `backend/data/midori.sqlite`.
+1. Na página inicial, clique em **Cadastrar** e crie uma conta com perfil **Vendedor**.
+2. Anuncie um produto com imagem de até 2 MB.
+3. Saia da conta e crie uma conta **Comprador** no mesmo navegador.
+4. Abra o produto, adicione ao carrinho e confira o total.
+5. Atualize a página: os dados continuam salvos no `localStorage` desse navegador.
 
-Rota pública para conferir a API: `GET /api/products`. Os endpoints protegidos enviam o token JWT como Bearer. A compra e o pagamento reais não estão implementados: o botão de finalizar apenas limpa o carrinho.
+Os dados são locais ao navegador e não são sincronizados entre dispositivos ou navegadores. As senhas ficam no armazenamento local, então esta implementação é apenas para demonstração e não deve ser usada em produção. Pagamentos reais não estão implementados.

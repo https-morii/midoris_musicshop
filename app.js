@@ -1,38 +1,26 @@
-// Plain JavaScript syntax is intentional so this file can also be compiled as app.ts.
-const TOKEN_KEY = 'midori_access_token';
+// Local-only edition: users, products, profiles, and carts are stored in this browser's localStorage.
+const USERS_KEY = 'midori_usuarios';
+const CURRENT_USER_KEY = 'midori_usuario_logado';
+const PRODUCTS_KEY = 'midori_produtos';
 const SELECTED_PRODUCT_KEY = 'midori_produto_selecionado';
 
-function apiBaseUrl() {
-  if (window.MIDORI_API_URL) return window.MIDORI_API_URL.replace(/\/$/, '');
-  let host = window.location.hostname;
-  if (host.includes('-8000.')) host = host.replace('-8000.', '-3000.');
-  const port = (host === 'localhost' || host === '127.0.0.1') && window.location.port === '8000' ? ':3000' : '';
-  return `${window.location.protocol}//${host}${port}/api`;
-}
-
-async function apiRequest(path, options) {
-  const requestOptions = options || {};
-  const headers = Object.assign({ 'Content-Type': 'application/json' }, requestOptions.headers || {});
-  const token = localStorage.getItem(TOKEN_KEY);
-  if (token) headers.Authorization = `Bearer ${token}`;
-  let response;
-  try { response = await fetch(`${apiBaseUrl()}${path}`, Object.assign({}, requestOptions, { headers })); }
-  catch (_error) { throw new Error(`Não foi possível acessar a API em ${apiBaseUrl()}. Verifique se o backend está rodando e se a porta 3000 está encaminhada.`); }
-  const text = await response.text();
-  let data = null;
-  try { data = text ? JSON.parse(text) : null; } catch (_error) { data = text; }
-  if (!response.ok) {
-    const message = data && (data.message || data.error);
-    throw new Error(Array.isArray(message) ? message.join(' ') : (message || `Erro HTTP ${response.status}`));
-  }
-  return data;
-}
+function readJson(key, fallback) { try { const value = localStorage.getItem(key); return value ? JSON.parse(value) : fallback; } catch (_error) { return fallback; } }
+function getUsers() { const users = readJson(USERS_KEY, []); return Array.isArray(users) ? users : []; }
+function saveUsers(users) { localStorage.setItem(USERS_KEY, JSON.stringify(users)); }
+function getProducts() { const products = readJson(PRODUCTS_KEY, []); return Array.isArray(products) ? products : []; }
+function saveProducts(products) { localStorage.setItem(PRODUCTS_KEY, JSON.stringify(products)); }
+function getCurrentUser() { return readJson(CURRENT_USER_KEY, null); }
+function saveCurrentUser(user) { localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user)); }
+function cartKey(userId) { return `midori_carrinho_${userId}`; }
+function getCart(userId) { const cart = readJson(cartKey(userId), []); return Array.isArray(cart) ? cart : []; }
+function saveCart(userId, cart) { localStorage.setItem(cartKey(userId), JSON.stringify(cart)); }
 function showMessage(element, message) { if (element) element.innerText = message; }
 function escapeHtml(value) { return String(value == null ? '' : value).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]); }
 function money(value) { return Number(value || 0).toFixed(2); }
-function getToken() { return localStorage.getItem(TOKEN_KEY); }
-function saveSession(session) { localStorage.setItem(TOKEN_KEY, session.accessToken); localStorage.setItem('midori_usuario_logado', JSON.stringify(session.user)); }
-function getCurrentUser() { try { return JSON.parse(localStorage.getItem('midori_usuario_logado') || 'null'); } catch (_error) { return null; } }
+function readField(id) { const element = document.getElementById(id); return element ? element.value : ''; }
+function setField(id, value) { const element = document.getElementById(id); if (element) element.value = value || ''; }
+function makeId() { return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`; }
+
 window.mudarAba = function (tab) {
   ['home','perfil','configuracoes'].forEach((name) => {
     const section = document.getElementById(name === 'home' ? 'aba-home' : name === 'perfil' ? 'aba-perfil' : 'aba-configuracoes');
@@ -42,94 +30,88 @@ window.mudarAba = function (tab) {
   });
   if (tab === 'perfil') loadProfile();
 };
-window.fazerLogout = function () { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem('midori_usuario_logado'); window.location.href = 'index.html'; };
-async function initializeAuth() {
+window.fazerLogout = function () { localStorage.removeItem(CURRENT_USER_KEY); window.location.href = 'index.html'; };
+function initializeAuth() {
   const loginForm = document.getElementById('form-login'), registerForm = document.getElementById('form-register');
   const message = document.getElementById('auth-message'), loginTab = document.getElementById('tab-login'), registerTab = document.getElementById('tab-register');
   loginTab?.addEventListener('click', () => { loginTab.classList.add('active'); registerTab?.classList.remove('active'); loginForm?.classList.add('active'); registerForm?.classList.remove('active'); showMessage(message, ''); });
   registerTab?.addEventListener('click', () => { registerTab.classList.add('active'); loginTab?.classList.remove('active'); registerForm?.classList.add('active'); loginForm?.classList.remove('active'); showMessage(message, ''); });
-  registerForm?.addEventListener('submit', async (event) => {
-    event.preventDefault(); showMessage(message, 'Criando conta…');
-    const password = document.getElementById('reg-password').value;
-    if (password !== document.getElementById('reg-confirm-password').value) { showMessage(message, 'As senhas não coincidem!'); return; }
-    try {
-      const session = await apiRequest('/auth/register', { method: 'POST', body: JSON.stringify({ name: document.getElementById('reg-name').value.trim(), email: document.getElementById('reg-email').value.trim(), password, role: document.getElementById('reg-role').value }) });
-      saveSession(session); window.location.href = 'loja.html';
-    } catch (error) { showMessage(message, error.message); }
+  registerForm?.addEventListener('submit', (event) => {
+    event.preventDefault(); const name = readField('reg-name').trim(), email = readField('reg-email').trim().toLowerCase(), password = readField('reg-password');
+    if (password !== readField('reg-confirm-password')) { showMessage(message, 'As senhas não coincidem!'); return; }
+    if (password.length < 4) { showMessage(message, 'A senha deve ter pelo menos 4 caracteres.'); return; }
+    const users = getUsers();
+    if (users.some((user) => user.email.toLowerCase() === email)) { showMessage(message, 'Este e-mail já está cadastrado neste navegador.'); return; }
+    const user = { id: makeId(), name, email, password, role: readField('reg-role') || 'comprador', telephone:'', state:'', city:'', neighborhood:'', gender:'' };
+    try { users.push(user); saveUsers(users); saveCurrentUser(user); window.location.href = 'loja.html'; } catch (_error) { showMessage(message, 'Não foi possível salvar. O armazenamento do navegador pode estar cheio.'); }
   });
-  loginForm?.addEventListener('submit', async (event) => {
-    event.preventDefault(); showMessage(message, 'Entrando…');
-    try {
-      const session = await apiRequest('/auth/login', { method: 'POST', body: JSON.stringify({ email: document.getElementById('login-email').value.trim(), password: document.getElementById('login-password').value }) });
-      saveSession(session); window.location.href = 'loja.html';
-    } catch (error) { showMessage(message, error.message); }
+  loginForm?.addEventListener('submit', (event) => {
+    event.preventDefault(); const email = readField('login-email').trim().toLowerCase(), password = readField('login-password');
+    const user = getUsers().find((item) => item.email.toLowerCase() === email && item.password === password);
+    if (!user) { showMessage(message, 'E-mail ou senha incorretos.'); return; }
+    saveCurrentUser(user); window.location.href = 'loja.html';
   });
 }
-async function requireSession() {
-  if (!getToken()) { window.location.href = 'index.html'; return null; }
-  try { const profile = await apiRequest('/auth/me'); localStorage.setItem('midori_usuario_logado', JSON.stringify(profile)); return profile; }
-  catch (_error) { window.fazerLogout(); return null; }
-}
-async function initializeShop() {
-  const user = await requireSession(); if (!user) return;
+function requireLocalUser() { const user = getCurrentUser(); if (!user || !user.id) { window.location.href = 'index.html'; return null; } return user; }
+function loadProfile() { const user = getCurrentUser(); if (!user) return; setField('perfil-nome',user.name); setField('perfil-telefone',user.telephone); setField('perfil-estado',user.state); setField('perfil-cidade',user.city); setField('perfil-bairro',user.neighborhood); setField('perfil-genero',user.gender); }
+function initializeShop() {
+  const user = requireLocalUser(); if (!user) return;
   const badge = document.getElementById('user-badge'); if (badge) badge.innerText = `${user.name} (${user.role.toUpperCase()})`;
   const panel = document.getElementById('seller-panel'); if (panel) panel.style.display = user.role === 'vendedor' ? 'block' : 'none';
   document.getElementById('btn-toggle-add')?.addEventListener('click', () => { document.getElementById('section-add-product')?.classList.toggle('hidden'); document.getElementById('section-my-products')?.classList.add('hidden'); });
-  document.getElementById('btn-toggle-my-products')?.addEventListener('click', async () => { const section = document.getElementById('section-my-products'); section?.classList.toggle('hidden'); document.getElementById('section-add-product')?.classList.add('hidden'); await renderProducts(); });
-  document.getElementById('form-add-product')?.addEventListener('submit', async (event) => {
-    event.preventDefault(); const form = event.currentTarget, input = document.getElementById('prod-image-file'), file = input.files && input.files[0];
+  document.getElementById('btn-toggle-my-products')?.addEventListener('click', () => { const section = document.getElementById('section-my-products'); section?.classList.toggle('hidden'); document.getElementById('section-add-product')?.classList.add('hidden'); renderProducts(); });
+  document.getElementById('form-add-product')?.addEventListener('submit', (event) => {
+    event.preventDefault(); const form = event.currentTarget, input = document.getElementById('prod-image-file'), file = input && input.files && input.files[0];
     if (!file) { alert('Por favor, selecione uma imagem.'); return; }
-    if (file.size > 3 * 1024 * 1024) { alert('A imagem deve ter no máximo 3 MB.'); return; }
-    try {
-      const imageUrl = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error('Não foi possível ler a imagem.')); reader.readAsDataURL(file); });
-      await apiRequest('/products', { method: 'POST', body: JSON.stringify({ name: document.getElementById('prod-name').value.trim(), price: Number(document.getElementById('prod-price').value), category: document.getElementById('prod-category').value.trim(), imageUrl }) });
-      form.reset(); await renderProducts(); alert('Produto anunciado com sucesso!');
-    } catch (error) { alert(error.message); }
+    if (file.size > 2 * 1024 * 1024) { alert('Para salvar no navegador, a imagem deve ter no máximo 2 MB.'); return; }
+    const reader = new FileReader(); reader.onerror = () => alert('Não foi possível ler a imagem.');
+    reader.onload = () => { try { const products = getProducts(); products.unshift({ id:makeId(),name:readField('prod-name').trim(),price:Number(readField('prod-price')),category:readField('prod-category').trim(),image:reader.result,sellerId:user.id }); saveProducts(products); form.reset(); renderProducts(); alert('Produto anunciado com sucesso!'); } catch (_error) { alert('Não foi possível salvar o produto. A imagem pode ser grande demais para o armazenamento do navegador.'); } };
+    reader.readAsDataURL(file);
   });
-  document.getElementById('form-alterar-perfil')?.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    try { const updated = await apiRequest('/auth/me', { method: 'PATCH', body: JSON.stringify({ name: document.getElementById('perfil-nome').value.trim(), telephone: document.getElementById('perfil-telefone').value.trim(), state: document.getElementById('perfil-estado').value.trim(), city: document.getElementById('perfil-cidade').value.trim(), neighborhood: document.getElementById('perfil-bairro').value.trim(), gender: document.getElementById('perfil-genero').value }) }); localStorage.setItem('midori_usuario_logado', JSON.stringify(updated)); if (badge) badge.innerText = `${updated.name} (${updated.role.toUpperCase()})`; alert('Perfil atualizado com sucesso!'); }
-    catch (error) { alert(error.message); }
+  document.getElementById('form-alterar-perfil')?.addEventListener('submit', (event) => {
+    event.preventDefault(); const users=getUsers(), index=users.findIndex((item)=>item.id===user.id); if(index<0){alert('Conta não encontrada.');return;}
+    Object.assign(users[index],{name:readField('perfil-nome').trim(),telephone:readField('perfil-telefone').trim(),state:readField('perfil-estado').trim(),city:readField('perfil-cidade').trim(),neighborhood:readField('perfil-bairro').trim(),gender:readField('perfil-genero')});
+    try { saveUsers(users); saveCurrentUser(users[index]); if(badge)badge.innerText=`${users[index].name} (${users[index].role.toUpperCase()})`; alert('Perfil atualizado!'); } catch(_error){alert('Não foi possível salvar as alterações.');}
   });
-  document.getElementById('form-trocar-senha')?.addEventListener('submit', async (event) => {
-    event.preventDefault(); const next = document.getElementById('senha-nova').value;
-    if (next !== document.getElementById('senha-nova-confirmacao').value) { alert('As novas senhas não coincidem!'); return; }
-    try { await apiRequest('/auth/me/password', { method: 'PATCH', body: JSON.stringify({ currentPassword: document.getElementById('senha-atual').value, newPassword: next }) }); event.currentTarget.reset(); alert('Senha alterada com sucesso!'); }
-    catch (error) { alert(error.message); }
+  document.getElementById('form-trocar-senha')?.addEventListener('submit',(event)=>{
+    event.preventDefault(); const users=getUsers(), index=users.findIndex((item)=>item.id===user.id), next=readField('senha-nova');
+    if(index<0||users[index].password!==readField('senha-atual')){alert('A senha atual está incorreta.');return;} if(next.length<4){alert('A nova senha deve ter pelo menos 4 caracteres.');return;} if(next!==readField('senha-nova-confirmacao')){alert('As novas senhas não coincidem!');return;}
+    users[index].password=next; saveUsers(users); saveCurrentUser(users[index]); event.currentTarget.reset(); alert('Senha alterada com sucesso!');
   });
-  document.getElementById('form-excluir-conta')?.addEventListener('submit', async (event) => {
-    event.preventDefault(); if (!confirm('Tem certeza? Sua conta e seus anúncios serão excluídos.')) return;
-    try { await apiRequest('/auth/me', { method: 'DELETE', body: JSON.stringify({ password: document.getElementById('senha-excluir').value }) }); window.fazerLogout(); }
-    catch (error) { alert(error.message); }
+  document.getElementById('form-excluir-conta')?.addEventListener('submit',(event)=>{
+    event.preventDefault(); if(!confirm('Tem certeza? Sua conta, anúncios e carrinho neste navegador serão excluídos.'))return;
+    const users=getUsers(),index=users.findIndex((item)=>item.id===user.id); if(index<0||users[index].password!==readField('senha-excluir')){alert('Senha incorreta.');return;}
+    saveUsers(users.filter((item)=>item.id!==user.id)); saveProducts(getProducts().filter((product)=>product.sellerId!==user.id)); localStorage.removeItem(cartKey(user.id)); window.fazerLogout();
   });
-  await Promise.all([renderProducts(), updateCart()]);
+  renderProducts(); updateCart();
 }
-async function loadProfile() {
-  try { const user = await apiRequest('/auth/me'); const fields = { 'perfil-nome':user.name,'perfil-telefone':user.telephone,'perfil-estado':user.state,'perfil-cidade':user.city,'perfil-bairro':user.neighborhood,'perfil-genero':user.gender }; Object.keys(fields).forEach((id) => { const el = document.getElementById(id); if (el) el.value = fields[id] || ''; }); }
-  catch (error) { alert(error.message); }
+function renderProducts() {
+  const products=getProducts(),user=getCurrentUser(),list=document.getElementById('product-list'),myList=document.getElementById('my-products-list');
+  if(list)list.innerHTML=products.length?products.map((p)=>{const owns=user&&user.id===p.sellerId;return `<div class="product-card"><img src="${escapeHtml(p.image||'')}" alt="${escapeHtml(p.name)}"><h3>${escapeHtml(p.name)}</h3><p>R$ ${money(p.price)}</p><button onclick="irParaDetalhes('${encodeURIComponent(p.id)}')">Ver Detalhes</button>${owns?`<button onclick="removerProduto('${encodeURIComponent(p.id)}')" style="margin-top:5px;background:#c83e59;color:white">Excluir Anúncio</button>`:''}</div>`;}).join(''):'<p class="empty-msg">Nenhum produto anunciado neste navegador.</p>';
+  if(myList){const mine=products.filter((p)=>user&&user.id===p.sellerId);myList.innerHTML=mine.length?mine.map((p)=>`<div class="product-card"><img src="${escapeHtml(p.image||'')}" alt="${escapeHtml(p.name)}"><h3>${escapeHtml(p.name)}</h3><p>R$ ${money(p.price)}</p><button onclick="removerProduto('${encodeURIComponent(p.id)}')" style="background:#c83e59;color:white">Excluir Anúncio</button></div>`).join(''):'<p class="empty-msg">Você ainda não anunciou produtos.</p>';}
 }
-async function renderProducts() {
-  try {
-    const products = await apiRequest('/products'), list = document.getElementById('product-list'), myList = document.getElementById('my-products-list'), user = getCurrentUser();
-    if (list) list.innerHTML = products.length ? products.map((p) => { const owns = user && Number(user.id) === Number(p.sellerId); return `<div class="product-card"><img src="${escapeHtml(p.imageUrl || '')}" alt="${escapeHtml(p.name)}"><h3>${escapeHtml(p.name)}</h3><p>R$ ${money(p.price)}</p><button onclick="irParaDetalhes(${Number(p.id)})">Ver Detalhes</button>${owns ? `<button onclick="removerProduto(${Number(p.id)})" style="margin-top:5px;background:#c83e59;color:white">Excluir Anúncio</button>` : ''}</div>`; }).join('') : '<p class="empty-msg">Nenhum produto anunciado no momento.</p>';
-    if (myList) { const mine = products.filter((p) => user && Number(user.id) === Number(p.sellerId)); myList.innerHTML = mine.length ? mine.map((p) => `<div class="product-card"><img src="${escapeHtml(p.imageUrl || '')}" alt="${escapeHtml(p.name)}"><h3>${escapeHtml(p.name)}</h3><p>R$ ${money(p.price)}</p><button onclick="removerProduto(${Number(p.id)})" style="background:#c83e59;color:white">Excluir Anúncio</button></div>`).join('') : '<p class="empty-msg">Não há produtos anunciados por enquanto.</p>'; }
-  } catch (error) { showMessage(document.getElementById('product-list'), error.message); }
+window.irParaDetalhes=function(id){localStorage.setItem(SELECTED_PRODUCT_KEY,decodeURIComponent(id));window.location.href='produto.html';};
+window.removerProduto=function(encodedId){const user=requireLocalUser();if(!user||!confirm('Excluir este anúncio?'))return;const id=decodeURIComponent(encodedId),product=getProducts().find((p)=>p.id===id);if(!product||product.sellerId!==user.id){alert('Você só pode excluir seus próprios anúncios.');return;}saveProducts(getProducts().filter((p)=>p.id!==id));renderProducts();};
+function updateCart(){
+  const user=getCurrentUser(),itemsEl=document.getElementById('cart-items');if(!user||!itemsEl)return;
+  const products=getProducts(),cart=getCart(user.id).filter((item)=>products.some((p)=>p.id===item.productId));saveCart(user.id,cart);
+  const detailed=cart.map((item)=>({item,product:products.find((p)=>p.id===item.productId)})),count=document.getElementById('cart-count'),total=document.getElementById('cart-total'),finish=document.getElementById('btn-finalizar');
+  if(count)count.innerText=String(cart.reduce((sum,item)=>sum+item.quantity,0));if(total)total.innerText=money(detailed.reduce((sum,e)=>sum+e.product.price*e.item.quantity,0));if(finish)finish.style.display=cart.length?'block':'none';
+  itemsEl.innerHTML=detailed.length?detailed.map(({item,product})=>`<li style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span>${escapeHtml(product.name)} (x${item.quantity}) - R$ ${money(product.price*item.quantity)}</span><button onclick="removerItemCarrinho('${encodeURIComponent(product.id)}')" title="Remover item">Remover</button></li>`).join(''):'<li>O carrinho está vazio!</li>';
 }
-window.irParaDetalhes = function (id) { localStorage.setItem(SELECTED_PRODUCT_KEY, String(id)); window.location.href = 'produto.html'; };
-window.removerProduto = async function (id) { if (!confirm('Excluir este anúncio?')) return; try { await apiRequest(`/products/${id}`, { method: 'DELETE' }); await renderProducts(); alert('Produto removido.'); } catch (error) { alert(error.message); } };
-async function updateCart() {
-  const list = document.getElementById('cart-items'); if (!list) return;
-  try { const cart = await apiRequest('/cart'); const count = document.getElementById('cart-count'), total = document.getElementById('cart-total'), finish = document.getElementById('btn-finalizar'); if (count) count.innerText = cart.totalItems; if (total) total.innerText = money(cart.total); if (finish) finish.style.display = cart.items.length ? 'block' : 'none'; list.innerHTML = cart.items.length ? cart.items.map((i) => `<li style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span>${escapeHtml(i.product.name)} (x${i.quantity}) - R$ ${money(i.subtotal)}</span><button onclick="removerItemCarrinho(${Number(i.product.id)})">Remover</button></li>`).join('') : '<li>O carrinho está vazio!</li>'; }
-  catch (error) { showMessage(list, error.message); }
+window.adicionarAoCarrinho=function(encodedId){changeCart(encodedId,true,false);};
+window.adicionarAoCarrinhoERetornar=function(encodedId){changeCart(encodedId,true,true);};
+function changeCart(encodedId,add,redirect){
+  const user=requireLocalUser();if(!user)return;const id=decodeURIComponent(encodedId),product=getProducts().find((p)=>p.id===id);if(!product){alert('Produto não encontrado.');return;}if(product.sellerId===user.id){alert('Você não pode adicionar seu próprio produto ao carrinho.');return;}
+  const cart=getCart(user.id),existing=cart.find((item)=>item.productId===id);if(existing)existing.quantity+=1;else cart.push({productId:id,quantity:1});
+  try{saveCart(user.id,cart);if(redirect)window.location.href='loja.html';else{updateCart();alert('Produto adicionado ao carrinho!');}}catch(_error){alert('Não foi possível salvar o carrinho no navegador.');}
 }
-window.adicionarAoCarrinho = async function (id) { try { await apiRequest('/cart/items', { method: 'POST', body: JSON.stringify({ productId:Number(id),quantity:1 }) }); await updateCart(); alert('Produto adicionado ao carrinho!'); } catch (error) { alert(error.message); } };
-window.adicionarAoCarrinhoERetornar = async function (id) { try { await apiRequest('/cart/items', { method: 'POST', body: JSON.stringify({ productId:Number(id),quantity:1 }) }); window.location.href = 'loja.html'; } catch (error) { alert(error.message); } };
-window.removerItemCarrinho = async function (id) { try { await apiRequest(`/cart/items/${id}`, { method:'DELETE' }); await updateCart(); } catch (error) { alert(error.message); } };
-window.finalizarCompra = async function () { try { const cart = await apiRequest('/cart'); if (!cart.items.length) { alert('O seu carrinho está vazio!'); return; } alert('Carrinho limpo. A finalização/pagamento real ainda não está implementada.'); await apiRequest('/cart', { method:'DELETE' }); await updateCart(); } catch (error) { alert(error.message); } };
-async function initializeProductPage() {
-  const container = document.getElementById('detalhe-produto'), id = localStorage.getItem(SELECTED_PRODUCT_KEY);
-  if (!container || !id) { if (container) container.innerHTML = '<p class="empty-msg">Produto não encontrado.</p>'; return; }
-  try { const p = await apiRequest(`/products/${encodeURIComponent(id)}`), user = getCurrentUser(), owns = user && Number(user.id) === Number(p.sellerId); const action = owns ? '<p style="margin-top:15px;font-weight:bold">Este produto é seu. Você não pode comprar o próprio anúncio.</p>' : `<button onclick="adicionarAoCarrinhoERetornar(${Number(p.id)})" class="glow-btn">Adicionar ao carrinho</button>`; container.innerHTML = `<img src="${escapeHtml(p.imageUrl || '')}" alt="${escapeHtml(p.name)}" style="max-width:100%;height:280px;object-fit:cover;border-radius:8px;margin-bottom:20px"><h2>${escapeHtml(p.name)}</h2><p>R$ ${money(p.price)}</p><p>Categoria: ${escapeHtml(p.category)}</p><p>Anunciado por usuário #${Number(p.sellerId)}</p>${action}`; }
-  catch (error) { container.innerHTML = `<p class="empty-msg">${escapeHtml(error.message)}</p>`; }
+window.removerItemCarrinho=function(encodedId){const user=getCurrentUser();if(!user)return;const id=decodeURIComponent(encodedId);saveCart(user.id,getCart(user.id).filter((item)=>item.productId!==id));updateCart();};
+window.finalizarCompra=function(){const user=getCurrentUser();if(!user)return;if(!getCart(user.id).length){alert('O seu carrinho está vazio!');return;}if(!confirm('Esvaziar o carrinho? A compra/pagamento real não está implementada.'))return;saveCart(user.id,[]);updateCart();alert('Carrinho esvaziado. Nenhum pagamento foi realizado.');};
+function initializeProductPage(){
+  const container=document.getElementById('detalhe-produto'),id=localStorage.getItem(SELECTED_PRODUCT_KEY);if(!container||!id){if(container)container.innerHTML='<p class="empty-msg">Produto não encontrado.</p>';return;}
+  const p=getProducts().find((item)=>item.id===id);if(!p){container.innerHTML='<p class="empty-msg">Produto não encontrado.</p>';return;}const user=getCurrentUser(),owns=user&&user.id===p.sellerId;
+  const action=owns?'<p style="margin-top:15px;font-weight:bold">Este produto é seu. Você não pode comprar o próprio anúncio.</p>':`<button onclick="adicionarAoCarrinhoERetornar('${encodeURIComponent(p.id)}')" class="glow-btn">Adicionar ao carrinho</button>`;
+  container.innerHTML=`<img src="${escapeHtml(p.image||'')}" alt="${escapeHtml(p.name)}" style="max-width:100%;height:280px;object-fit:cover;border-radius:8px;margin-bottom:20px"><h2>${escapeHtml(p.name)}</h2><p>R$ ${money(p.price)}</p><p>Categoria: ${escapeHtml(p.category)}</p><p>Anunciado por: ${escapeHtml(getUsers().find((u)=>u.id===p.sellerId)?.name||'usuário')}</p>${action}`;
 }
-document.addEventListener('DOMContentLoaded', () => { if (document.getElementById('form-login')) initializeAuth(); if (document.getElementById('user-badge')) initializeShop(); if (document.getElementById('detalhe-produto')) initializeProductPage(); });
+document.addEventListener('DOMContentLoaded',()=>{if(document.getElementById('form-login'))initializeAuth();if(document.getElementById('user-badge'))initializeShop();if(document.getElementById('detalhe-produto'))initializeProductPage();});
