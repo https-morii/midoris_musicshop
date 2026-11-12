@@ -11,49 +11,9 @@
         <h1>🎸 Midori's Music Shop</h1>
         <button onclick="window.location.href='loja.html'" class="glow-btn" style="width: auto; padding: 8px 15px;">Voltar à Loja</button>
     </header>
-
     <main style="max-width: 600px; margin: 40px auto;">
-        <section style="text-align: center;">
-            <div id="detalhe-produto">
-                <!-- Preenchido dinamicamente -->
-            </div>
-        </section>
+        <section style="text-align: center;"><div id="detalhe-produto"><p>Carregando produto…</p></div></section>
     </main>
-
-    <script src="app.js"></script>
-    <script>
-        document.addEventListener("DOMContentLoaded", () => {
-            const idProduto = localStorage.getItem("midori_produto_selecionado");
-            const produtos = JSON.parse(localStorage.getItem("midori_produtos") || "[]");
-            const usuarioLogado = JSON.parse(localStorage.getItem("midori_usuario_logado") || "{}");
-            const produto = produtos.find(p => p.id == idProduto);
-
-            const container = document.getElementById("detalhe-produto");
-
-            if (!produto) {
-                container.innerHTML = "<p class='empty-msg'>Produto não encontrado.</p>";
-                return;
-            }
-
-            // Verifica se o usuário logado é o dono do produto
-            const eMeuProduto = usuarioLogado && usuarioLogado.email === produto.vendedorEmail;
-
-            let botaoAcaoHtml = '';
-            if (eMeuProduto) {
-                botaoAcaoHtml = `<p style="color: #ff5555; margin-top: 15px; font-weight: bold;">Este produto é seu. Você não pode comprar o seu próprio anúncio.</p>`;
-            } else {
-                botaoAcaoHtml = `<button onclick="adicionarAoCarrinho(${produto.id}); alert('Produto adicionado ao carrinho!'); window.location.href='loja.html';" class="glow-btn" style="margin-top: 15px;">Adicionar ao Carrinho e Comprar</button>`;
-            }
-
-            container.innerHTML = `
-                <img src="${produto.imagem}" alt="${produto.nome}" style="max-width: 100%; height: 280px; object-fit: cover; border-radius: 8px; margin-bottom: 20px; border: 1px solid rgba(0,255,136,0.3);">
-                <h2 style="color: #00ff88; font-size: 1.5rem; margin-bottom: 10px;">${produto.nome}</h2>
-                <p style="font-size: 1.3rem; color: #fff; font-weight: bold; margin-bottom: 15px;">R$ ${produto.preco.toFixed(2)}</p>
-                <p style="color: #88c0ab; margin-bottom: 10px;">Categoria: ${produto.categoria}</p>
-                <p style="color: #aaa; font-size: 0.9rem; margin-bottom: 25px;">Anunciado por: ${produto.vendedorEmail}</p>
-                ${botaoAcaoHtml}
-            `;
-        });
-    </script>
+    <script src="app.js" defer></script>
 </body>
 </html>

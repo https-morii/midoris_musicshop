@@ -1,37 +1,21 @@
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  OneToMany,
-  PrimaryGeneratedColumn,
-} from 'typeorm';
+import { Column, CreateDateColumn, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 import { CartItem } from '../../cart/cart-item.entity';
 import { Product } from '../../products/product.entity';
 import { UserRole } from '../../common/auth-user.interface';
 
 @Entity('users')
 export class User {
-  @PrimaryGeneratedColumn()
-  id: number;
-
-  @Column({ length: 120 })
-  name: string;
-
-  @Column({ unique: true, length: 180 })
-  email: string;
-
-  @Column({ name: 'password_hash' })
-  passwordHash: string;
-
-  @Column({ type: 'text', default: 'comprador' })
-  role: UserRole;
-
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
-
-  @OneToMany(() => Product, (product) => product.seller)
-  products: Product[];
-
-  @OneToMany(() => CartItem, (item) => item.user)
-  cartItems: CartItem[];
+  @PrimaryGeneratedColumn() id: number;
+  @Column({ length: 120 }) name: string;
+  @Column({ unique: true, length: 180 }) email: string;
+  @Column({ name: 'password_hash' }) passwordHash: string;
+  @Column({ type: 'text', default: 'comprador' }) role: UserRole;
+  @Column({ type: 'text', nullable: true }) telephone: string | null;
+  @Column({ type: 'text', nullable: true }) state: string | null;
+  @Column({ type: 'text', nullable: true }) city: string | null;
+  @Column({ type: 'text', nullable: true }) neighborhood: string | null;
+  @Column({ type: 'text', nullable: true }) gender: string | null;
+  @CreateDateColumn({ name: 'created_at' }) createdAt: Date;
+  @OneToMany(() => Product, (product) => product.seller) products: Product[];
+  @OneToMany(() => CartItem, (item) => item.user) cartItems: CartItem[];
 }

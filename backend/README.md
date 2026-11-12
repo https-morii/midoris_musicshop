@@ -1,54 +1,60 @@
 # Backend — Midori's Music Shop
 
-REST API em NestJS + TypeScript. O SQLite armazena usuários, anúncios e itens de carrinho; a API recebe e responde JSON. O backend é uma aplicação separada em `backend/` e ainda não substitui automaticamente o `LocalStorage` usado pelas páginas HTML atuais.
+REST API em NestJS + TypeScript, com SQLite para usuários, produtos e carrinho. O frontend HTML/TypeScript é integrado à API; cadastros, anúncios e carrinho passam a ser persistidos pelo backend. Apenas o token de autenticação e o identificador do produto selecionado permanecem no LocalStorage do navegador.
 
-## Requisitos e inicialização
+## Executar no Codespaces
 
-Requer Node.js 18 ou superior e npm. No Codespace, abra um terminal e execute:
+Use dois terminais no Codespace.
+
+**Terminal 1 — backend:**
 
 ```bash
 cd backend
 cp .env.example .env
+# Edite .env e substitua JWT_SECRET por uma chave aleatória longa
 npm install
 npm run start:dev
 ```
 
-A API fica em `http://localhost:3000/api`. No Codespaces, abra a aba **Ports** e encaminhe a porta `3000` para acessá-la pelo navegador. O arquivo SQLite é criado em `backend/data/midori.sqlite` automaticamente.
+A API fica na porta `3000`; aguarde a inicialização e encaminhe a porta na aba **Ports** do Codespaces.
 
-Configure `JWT_SECRET` em `.env` com uma chave aleatória longa. O valor fallback existe apenas para desenvolvimento local. `DATABASE_PATH` e `PORT` também podem ser alterados no `.env`.
+**Terminal 2 — frontend:** na raiz do repositório:
 
-## Endpoints
+```bash
+npx tsc app.ts --target es2015 --module none
+python3 -m http.server 8000 --bind 0.0.0.0
+```
 
-Todos os endpoints usam o prefixo `/api`. Corpos e respostas são JSON. Para rotas protegidas, envie `Authorization: Bearer <accessToken>` retornado por login ou cadastro.
+Encaminhe também a porta `8000` e abra a URL do frontend em `/` (que carrega `index.html`). O frontend detecta a porta `3000` automaticamente no Codespaces e em `localhost`. Se usar outra porta/domínio, defina `window.MIDORI_API_URL` antes de carregar `app.js` (por exemplo em um script de configuração HTML).
 
-| Método | Rota | Acesso | Descrição |
-| --- | --- | --- | --- |
-| `POST` | `/auth/register` | Público | Cadastra usuário (`name`, `email`, `password`, `role` opcional: `comprador` ou `vendedor`) |
-| `POST` | `/auth/login` | Público | Autentica e retorna token JWT e dados públicos do usuário |
-| `GET` | `/auth/me` | Token | Retorna o perfil da sessão |
-| `GET` | `/products` | Público | Lista anúncios |
-| `GET` | `/products/:id` | Público | Consulta anúncio |
-| `POST` | `/products` | Vendedor | Cria anúncio (`name`, `price`, `category`; `description` e `imageUrl` opcionais) |
-| `PATCH` | `/products/:id` | Dono do anúncio | Atualiza campos do anúncio |
-| `DELETE` | `/products/:id` | Dono do anúncio | Exclui anúncio |
-| `GET` | `/cart` | Token | Mostra itens, quantidades e total do carrinho do usuário |
-| `POST` | `/cart/items` | Token | Adiciona item (`productId`, `quantity` opcional) |
-| `PATCH` | `/cart/items/:productId` | Token | Atualiza quantidade (`quantity`) |
-| `DELETE` | `/cart/items/:productId` | Token | Remove item |
-| `DELETE` | `/cart` | Token | Esvazia carrinho |
+O banco é criado em `backend/data/midori.sqlite`; confira que a porta 3000 está encaminhada e acessível pelo navegador. Atualize a página após iniciar ambos os servidores.
 
-Exemplo de cadastro:
+## Teste funcional
+
+1. Na página de cadastro, crie uma conta com senha de pelo menos 8 caracteres e perfil **Vendedor**. O usuário é criado no SQLite e o login é iniciado automaticamente.
+2. Anuncie um produto com imagem (máximo 3 MB). O anúncio fica na tabela `products`.
+3. Abra uma janela anônima ou outro navegador e cadastre um perfil **Comprador**.
+4. Abra o produto, adicione ao carrinho e confira o total. O carrinho fica na tabela `cart_items`.
+5. Faça logout e entre novamente: os produtos e o carrinho devem permanecer no SQLite.
+
+Também pode testar a API diretamente:
+
+```bash
+curl http://localhost:3000/api/products
+```
+
+Para cadastro, use senha com ao menos 8 caracteres:
 
 ```bash
 curl -X POST http://localhost:3000/api/auth/register \
   -H 'Content-Type: application/json' \
-  -d '{"name":"Pessoa Teste","email":"pessoa@example.com","password":"senha-segura-123","role":"vendedor"}'
+  -d '{"name":"Vendedor Teste","email":"vendedor@example.com","password":"senha-teste-123","role":"vendedor"}'
 ```
 
-## Observações
+## Rotas incluídas
 
-- Senhas são armazenadas como hashes bcrypt, nunca em texto puro. Respostas da API não incluem hashes.
-- O SQLite guarda dados no arquivo local; usuários e sessões não são compartilhados entre dispositivos.
-- A finalização de compra/pagamento não está implementada; carrinho é apenas persistido e calculado.
-- Em desenvolvimento, TypeORM cria/atualiza tabelas com `synchronize`. Em produção isso fica desativado; configure e execute migrations antes de usar `NODE_ENV=production`.
-- O frontend atual ainda usa `LocalStorage`. Integrá-lo a esta API é um passo separado: trocar as leituras/escritas locais por chamadas `fetch` e guardar o token de sessão.
+- `POST /api/auth/register`, `POST /api/auth/login`, `GET/PATCH/DELETE /api/auth/me`, `PATCH /api/auth/me/password`
+- `GET/POST /api/products`, `GET/PATCH/DELETE /api/products/:id`
+- `GET/POST /api/cart`, `POST /api/cart/items`, `PATCH/DELETE /api/cart/items/:productId`
+
+Rotas protegidas usam `Authorization: Bearer <accessToken>`. Senhas são armazenadas com bcrypt. A compra/pagamento real não está implementada; o botão apenas limpa o carrinho. O TypeORM sincroniza o esquema em desenvolvimento; para produção configure migrations.
