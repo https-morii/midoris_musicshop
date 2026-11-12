@@ -50,3 +50,12 @@ O sistema é dividido em páginas independentes para garantir um fluxo de navega
 3. Instale as dependências do projeto:
    ```bash
    npm install
+
+   Para compilar o código TypeScript para JavaScript (caso utilize scripts independentes):
+
+Bash
+npx tsc app.ts --target es2015 --module none
+Inicie a aplicação:
+
+Bash
+npm run start
