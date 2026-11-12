@@ -1,538 +1,276 @@
+// Plain JavaScript syntax is intentional so this file can also be compiled as app.ts.
+const TOKEN_KEY = 'midori_access_token';
+const SELECTED_PRODUCT_KEY = 'midori_produto_selecionado';
 
-interface Usuario {
-  nome: string;
-  email: string;
-  senha: string;
-  role: 'comprador' | 'vendedor';
-  telefone?: string;
-  cidade?: string;
-  estado?: string;
-  bairro?: string;
-  genero?: string;
+function apiBaseUrl() {
+  if (window.MIDORI_API_URL) return window.MIDORI_API_URL.replace(/\/$/, '');
+  let host = window.location.hostname;
+  if (host.includes('-8000.')) host = host.replace('-8000.', '-3000.');
+  const port = (host === 'localhost' || host === '127.0.0.1') && window.location.port === '8000' ? ':3000' : '';
+  return `${window.location.protocol}//${host}${port}/api`;
 }
 
-interface Produto {
-  id: number;
-  nome: string;
-  preco: number;
-  categoria: string;
-  imagem: string;
-  vendedorEmail: string;
-}
-
-interface ItemCarrinho {
-  produto: Produto;
-  quantidade: number;
-}
-
-function getUsuarios(): Usuario[] {
-  const data = localStorage.getItem("midori_usuarios");
-  if (data) return JSON.parse(data);
-  const usuariosIniciais: Usuario[] = [
-    { nome: "Vendedor Teste", email: "vendedor@teste.com", senha: "123", role: "vendedor", cidade: "São Paulo", bairro: "Centro", genero: "Outro" },
-    { nome: "Comprador Teste", email: "comprador@teste.com", senha: "123", role: "comprador", cidade: "São Paulo", bairro: "Pinheiros", genero: "Prefiro não informar" }
-  ];
-  localStorage.setItem("midori_usuarios", JSON.stringify(usuariosIniciais));
-  return usuariosIniciais;
-}
-
-function salvarUsuarios(usuarios: Usuario[]): void {
-  localStorage.setItem("midori_usuarios", JSON.stringify(usuarios));
-}
-
-function getUsuarioLogado(): Usuario | null {
-  const data = localStorage.getItem("midori_usuario_logado");
-  return data ? JSON.parse(data) : null;
-}
-
-function salvarUsuarioLogado(usuario: Usuario): void {
-  localStorage.setItem("midori_usuario_logado", JSON.stringify(usuario));
-}
-
-function getProdutos(): Produto[] {
-  const data = localStorage.getItem("midori_produtos");
-  return data ? JSON.parse(data) : [];
-}
-
-function getCarrinho(): ItemCarrinho[] {
-  const data = localStorage.getItem("midori_carrinho");
-  return data ? JSON.parse(data) : [];
-}
-
-function salvarCarrinho(carrinho: ItemCarrinho[]): void {
-  localStorage.setItem("midori_carrinho", JSON.stringify(carrinho));
-}
-
-function salvarProdutos(produtos: Produto[]): void {
-  localStorage.setItem("midori_produtos", JSON.stringify(produtos));
-}
-
-// Controle de abas do painel lateral
-(window as any).mudarAba = function(aba: string): void {
-  const abaHome = document.getElementById("aba-home");
-  const abaPerfil = document.getElementById("aba-perfil");
-  const abaConfig = document.getElementById("aba-configuracoes");
-
-  const menuHome = document.getElementById("menu-home");
-  const menuPerfil = document.getElementById("menu-perfil");
-  const menuConfig = document.getElementById("menu-config");
-
-  abaHome?.classList.add("hidden");
-  abaPerfil?.classList.add("hidden");
-  abaConfig?.classList.add("hidden");
-
-  menuHome?.classList.remove("active");
-  menuPerfil?.classList.remove("active");
-  menuConfig?.classList.remove("active");
-
-  if (aba === 'home') {
-    abaHome?.classList.remove("hidden");
-    menuHome?.classList.add("active");
-  } else if (aba === 'perfil') {
-    abaPerfil?.classList.remove("hidden");
-    menuPerfil?.classList.add("active");
-    carregarDadosPerfil();
-  } else if (aba === 'configuracoes') {
-    abaConfig?.classList.remove("hidden");
-    menuConfig?.classList.add("active");
+async function apiRequest(path, options) {
+  const requestOptions = options || {};
+  const headers = Object.assign({ 'Content-Type': 'application/json' }, requestOptions.headers || {});
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (token) headers.Authorization = `Bearer ${token}`;
+  let response;
+  try {
+    response = await fetch(`${apiBaseUrl()}${path}`, Object.assign({}, requestOptions, { headers }));
+  } catch (_error) {
+    throw new Error(`Não foi possível acessar a API em ${apiBaseUrl()}. Verifique se o backend está rodando e se a porta 3000 está encaminhada.`);
   }
+  const text = await response.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch (_error) { data = text; }
+  if (!response.ok) {
+    const message = data && (data.message || data.error);
+    throw new Error(Array.isArray(message) ? message.join(' ') : (message || `Erro HTTP ${response.status}`));
+  }
+  return data;
+}
+
+function showMessage(element, message) { if (element) element.innerText = message; }
+function escapeHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[character]);
+}
+function money(value) { return Number(value || 0).toFixed(2); }
+function getToken() { return localStorage.getItem(TOKEN_KEY); }
+function saveSession(session) {
+  localStorage.setItem(TOKEN_KEY, session.accessToken);
+  localStorage.setItem('midori_usuario_logado', JSON.stringify(session.user));
+}
+function getCurrentUser() {
+  try { return JSON.parse(localStorage.getItem('midori_usuario_logado') || 'null'); }
+  catch (_error) { return null; }
+}
+
+window.mudarAba = function (tab) {
+  ['home', 'perfil', 'configuracoes'].forEach((name) => {
+    const section = document.getElementById(name === 'home' ? 'aba-home' : name === 'perfil' ? 'aba-perfil' : 'aba-configuracoes');
+    const button = document.getElementById(name === 'home' ? 'menu-home' : name === 'perfil' ? 'menu-perfil' : 'menu-config');
+    if (section) section.classList.toggle('hidden', name !== tab);
+    if (button) button.classList.toggle('active', name === tab);
+  });
+  if (tab === 'perfil') loadProfile();
+};
+window.fazerLogout = function () {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem('midori_usuario_logado');
+  window.location.href = 'index.html';
 };
 
-function carregarDadosPerfil(): void {
-  const usuario = getUsuarioLogado();
-  if (!usuario) return;
-
-  const perfilNome = document.getElementById("perfil-nome") as HTMLInputElement;
-  const perfilTelefone = document.getElementById("perfil-telefone") as HTMLInputElement;
-  const perfilCidade = document.getElementById("perfil-cidade") as HTMLInputElement;
-  const perfilEstado = document.getElementById("perfil-estado") as HTMLInputElement;
-  const perfilBairro = document.getElementById("perfil-bairro") as HTMLInputElement;
-  const perfilGenero = document.getElementById("perfil-genero") as HTMLSelectElement;
-
-  if (perfilNome) perfilNome.value = usuario.nome || "";
-  if (perfilTelefone) perfilTelefone.value = usuario.telefone || "";
-  if (perfilCidade) perfilCidade.value = usuario.cidade || "";
-  if (perfilEstado) perfilEstado.value = usuario.estado || "";
-  if (perfilBairro) perfilBairro.value = usuario.bairro || "";
-  if (perfilGenero) perfilGenero.value = usuario.genero || "";
+async function initializeAuth() {
+  const loginForm = document.getElementById('form-login');
+  const registerForm = document.getElementById('form-register');
+  const message = document.getElementById('auth-message');
+  const loginTab = document.getElementById('tab-login');
+  const registerTab = document.getElementById('tab-register');
+  loginTab?.addEventListener('click', () => {
+    loginTab.classList.add('active'); registerTab?.classList.remove('active');
+    loginForm?.classList.add('active'); registerForm?.classList.remove('active'); showMessage(message, '');
+  });
+  registerTab?.addEventListener('click', () => {
+    registerTab.classList.add('active'); loginTab?.classList.remove('active');
+    registerForm?.classList.add('active'); loginForm?.classList.remove('active'); showMessage(message, '');
+  });
+  registerForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    showMessage(message, 'Criando conta…');
+    const password = document.getElementById('reg-password').value;
+    if (password !== document.getElementById('reg-confirm-password').value) { showMessage(message, 'As senhas não coincidem!'); return; }
+    try {
+      const session = await apiRequest('/auth/register', { method: 'POST', body: JSON.stringify({
+        name: document.getElementById('reg-name').value.trim(),
+        email: document.getElementById('reg-email').value.trim(), password,
+        role: document.getElementById('reg-role').value
+      }) });
+      saveSession(session);
+      window.location.href = 'loja.html';
+    } catch (error) { showMessage(message, error.message); }
+  });
+  loginForm?.addEventListener('submit', async (event) => {
+    event.preventDefault(); showMessage(message, 'Entrando…');
+    try {
+      const session = await apiRequest('/auth/login', { method: 'POST', body: JSON.stringify({
+        email: document.getElementById('login-email').value.trim(),
+        password: document.getElementById('login-password').value
+      }) });
+      saveSession(session); window.location.href = 'loja.html';
+    } catch (error) { showMessage(message, error.message); }
+  });
 }
 
-(window as any).fazerLogout = function(): void {
-  localStorage.removeItem("midori_usuario_logado");
-  localStorage.removeItem("midori_carrinho");
-  window.location.href = "index.html";
-};
+async function requireSession() {
+  if (!getToken()) { window.location.href = 'index.html'; return null; }
+  try {
+    const profile = await apiRequest('/auth/me');
+    localStorage.setItem('midori_usuario_logado', JSON.stringify(profile));
+    return profile;
+  } catch (_error) { window.fazerLogout(); return null; }
+}
 
-// Lógica da tela de loja (`loja.html`)
-function inicializarLoja(): void {
-  const usuario = getUsuarioLogado();
-  if (!usuario) {
-    window.location.href = "index.html";
-    return;
-  }
-
-  const userBadge = document.getElementById("user-badge");
-  const sellerPanel = document.getElementById("seller-panel");
-
-  if (userBadge) {
-    userBadge.innerText = `${usuario.nome} (${usuario.role.toUpperCase()})`;
-  }
-
-  if (sellerPanel) {
-    sellerPanel.style.display = usuario.role === 'vendedor' ? 'block' : 'none';
-  }
-
-  renderizarProdutos();
-  atualizarCarrinho();
-
-  const btnToggleAdd = document.getElementById("btn-toggle-add");
-  const btnToggleMyProducts = document.getElementById("btn-toggle-my-products");
-  const sectionAddProduct = document.getElementById("section-add-product");
-  const sectionMyProducts = document.getElementById("section-my-products");
-
-  btnToggleAdd?.addEventListener("click", () => {
-    sectionAddProduct?.classList.toggle("hidden");
-    sectionMyProducts?.classList.add("hidden");
+async function initializeShop() {
+  const user = await requireSession();
+  if (!user) return;
+  const badge = document.getElementById('user-badge');
+  if (badge) badge.innerText = `${user.name} (${user.role.toUpperCase()})`;
+  const sellerPanel = document.getElementById('seller-panel');
+  if (sellerPanel) sellerPanel.style.display = user.role === 'vendedor' ? 'block' : 'none';
+  document.getElementById('btn-toggle-add')?.addEventListener('click', () => {
+    document.getElementById('section-add-product')?.classList.toggle('hidden');
+    document.getElementById('section-my-products')?.classList.add('hidden');
   });
-
-  btnToggleMyProducts?.addEventListener("click", () => {
-    sectionMyProducts?.classList.toggle("hidden");
-    sectionAddProduct?.classList.add("hidden");
-    renderizarMeusProdutos();
+  document.getElementById('btn-toggle-my-products')?.addEventListener('click', async () => {
+    const section = document.getElementById('section-my-products');
+    section?.classList.toggle('hidden');
+    document.getElementById('section-add-product')?.classList.add('hidden');
+    await renderProducts();
   });
-
-  const formAddProduct = document.getElementById("form-add-product") as HTMLFormElement;
-  formAddProduct?.addEventListener("submit", (e) => {
-    e.preventDefault();
-    if (!usuario) return;
-
-    const nome = (document.getElementById("prod-name") as HTMLInputElement).value;
-    const preco = parseFloat((document.getElementById("prod-price") as HTMLInputElement).value);
-    const categoria = (document.getElementById("prod-category") as HTMLInputElement).value;
-    const imageFileInput = document.getElementById("prod-image-file") as HTMLInputElement;
-    const file = imageFileInput.files?.[0];
-
-    if (!file) {
-      alert("Por favor, selecione uma imagem.");
-      return;
-    }
-
-    const reader = new FileReader();
-
-    reader.onload = function(event) {
-      const imagemBase64 = event.target?.result as string;
-
-      const lista = getProdutos();
-      lista.push({
-        id: Date.now(),
-        nome,
-        preco,
-        categoria,
-        imagem: imagemBase64,
-        vendedorEmail: usuario.email
+  document.getElementById('form-add-product')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const imageInput = document.getElementById('prod-image-file');
+    const file = imageInput.files && imageInput.files[0];
+    if (!file) { alert('Por favor, selecione uma imagem.'); return; }
+    if (file.size > 3 * 1024 * 1024) { alert('A imagem deve ter no máximo 3 MB.'); return; }
+    try {
+      const imageUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Não foi possível ler a imagem.'));
+        reader.readAsDataURL(file);
       });
-
-      salvarProdutos(lista);
-      formAddProduct.reset();
-      renderizarProdutos();
-      renderizarMeusProdutos();
-      alert("Produto anunciado com sucesso!");
-    };
-
-    reader.readAsDataURL(file);
+      await apiRequest('/products', { method: 'POST', body: JSON.stringify({
+        name: document.getElementById('prod-name').value.trim(),
+        price: Number(document.getElementById('prod-price').value),
+        category: document.getElementById('prod-category').value.trim(), imageUrl
+      }) });
+      form.reset(); await renderProducts(); alert('Produto anunciado com sucesso!');
+    } catch (error) { alert(error.message); }
   });
-
-  // SUBMIT: Alterar Perfil
-  const formAlterarPerfil = document.getElementById("form-alterar-perfil") as HTMLFormElement;
-  formAlterarPerfil?.addEventListener("submit", (e) => {
-    e.preventDefault();
-    if (!usuario) return;
-
-    const novoNome = (document.getElementById("perfil-nome") as HTMLInputElement).value;
-    const novoTelefone = (document.getElementById("perfil-telefone") as HTMLInputElement).value;
-    const novaCidade = (document.getElementById("perfil-cidade") as HTMLInputElement).value;
-    const novoEstado = (document.getElementById("perfil-estado") as HTMLInputElement).value;
-    const novoBairro = (document.getElementById("perfil-bairro") as HTMLInputElement).value;
-    const novoGenero = (document.getElementById("perfil-genero") as HTMLSelectElement).value;
-
-    let usuarios = getUsuarios();
-    const index = usuarios.findIndex(u => u.email === usuario.email);
-
-    if (index !== -1) {
-      usuarios[index]!.nome = novoNome;
-      usuarios[index]!.telefone = novoTelefone;
-      usuarios[index]!.cidade = novaCidade;
-      usuarios[index]!.estado = novoEstado;
-      usuarios[index]!.bairro = novoBairro;
-      usuarios[index]!.genero = novoGenero;
-
-      salvarUsuarios(usuarios);
-      salvarUsuarioLogado(usuarios[index]!);
-
-      if (userBadge) {
-        userBadge.innerText = `${novoNome} (${usuarios[index]!.role.toUpperCase()})`;
-      }
-
-      alert("Perfil atualizado com sucesso!");
-    }
+  document.getElementById('form-alterar-perfil')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      const updated = await apiRequest('/auth/me', { method: 'PATCH', body: JSON.stringify({
+        name: document.getElementById('perfil-nome').value.trim(),
+        telephone: document.getElementById('perfil-telefone').value.trim(),
+        state: document.getElementById('perfil-estado').value.trim(),
+        city: document.getElementById('perfil-cidade').value.trim(),
+        neighborhood: document.getElementById('perfil-bairro').value.trim(),
+        gender: document.getElementById('perfil-genero').value
+      }) });
+      localStorage.setItem('midori_usuario_logado', JSON.stringify(updated));
+      if (badge) badge.innerText = `${updated.name} (${updated.role.toUpperCase()})`;
+      alert('Perfil atualizado com sucesso!');
+    } catch (error) { alert(error.message); }
   });
-
-  // SUBMIT: Trocar Senha
-  const formTrocarSenha = document.getElementById("form-trocar-senha") as HTMLFormElement;
-  formTrocarSenha?.addEventListener("submit", (e) => {
-    e.preventDefault();
-    if (!usuario) return;
-
-    const senhaAtual = (document.getElementById("senha-atual") as HTMLInputElement).value;
-    const senhaNova = (document.getElementById("senha-nova") as HTMLInputElement).value;
-    const senhaNovaConfirmacao = (document.getElementById("senha-nova-confirmacao") as HTMLInputElement).value;
-
-    if (senhaNova !== senhaNovaConfirmacao) {
-      alert("As novas senhas não coincidem!");
-      return;
-    }
-
-    let usuarios = getUsuarios();
-    const userIndex = usuarios.findIndex(u => u.email === usuario.email);
-
-    if (userIndex === -1 || usuarios[userIndex]?.senha !== senhaAtual) {
-      alert("A senha anterior está incorreta!");
-      return;
-    }
-
-    usuarios[userIndex]!.senha = senhaNova;
-    salvarUsuarios(usuarios);
-    salvarUsuarioLogado(usuarios[userIndex]!);
-    formTrocarSenha.reset();
-    alert("Senha alterada com sucesso!");
+  document.getElementById('form-trocar-senha')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const newPassword = document.getElementById('senha-nova').value;
+    if (newPassword !== document.getElementById('senha-nova-confirmacao').value) { alert('As novas senhas não coincidem!'); return; }
+    try {
+      await apiRequest('/auth/me/password', { method: 'PATCH', body: JSON.stringify({ currentPassword: document.getElementById('senha-atual').value, newPassword }) });
+      event.currentTarget.reset(); alert('Senha alterada com sucesso!');
+    } catch (error) { alert(error.message); }
   });
-
-  // SUBMIT: Excluir Conta
-  const formExcluirConta = document.getElementById("form-excluir-conta") as HTMLFormElement;
-  formExcluirConta?.addEventListener("submit", (e) => {
-    e.preventDefault();
-    if (!usuario) return;
-
-    const senhaExcluir = (document.getElementById("senha-excluir") as HTMLInputElement).value;
-
-    let usuarios = getUsuarios();
-    const userIndex = usuarios.findIndex(u => u.email === usuario.email);
-
-    if (userIndex === -1 || usuarios[userIndex]?.senha !== senhaExcluir) {
-      alert("Senha incorreta. Não foi possível excluir a conta.");
-      return;
-    }
-
-    const confirmar = confirm("Tem certeza absoluta de que deseja excluir a sua conta? Esta ação não pode ser desfeita.");
-    if (!confirmar) return;
-
-    usuarios.splice(userIndex, 1);
-    salvarUsuarios(usuarios);
-
-    let produtos = getProdutos();
-    produtos = produtos.filter(p => p.vendedorEmail !== usuario.email);
-    salvarProdutos(produtos);
-
-    localStorage.removeItem("midori_usuario_logado");
-    localStorage.removeItem("midori_carrinho");
-    alert("Sua conta foi excluída com sucesso.");
-    window.location.href = "index.html";
+  document.getElementById('form-excluir-conta')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!confirm('Tem certeza? Sua conta e seus anúncios serão excluídos.')) return;
+    try {
+      await apiRequest('/auth/me', { method: 'DELETE', body: JSON.stringify({ password: document.getElementById('senha-excluir').value }) });
+      window.fazerLogout();
+    } catch (error) { alert(error.message); }
   });
+  await Promise.all([renderProducts(), updateCart()]);
 }
 
-function renderizarProdutos(): void {
-  const productListEl = document.getElementById("product-list");
-  if (!productListEl) return;
-
-  const produtos = getProdutos();
-  const usuario = getUsuarioLogado();
-
-  if (produtos.length === 0) {
-    productListEl.innerHTML = `<p class="empty-msg">Nenhum produto anunciado no momento.</p>`;
-    return;
-  }
-
-  productListEl.innerHTML = "";
-  produtos.forEach(produto => {
-    const card = document.createElement("div");
-    card.className = "product-card";
-
-    let botaoAcao = `<button onclick="irParaDetalhes(${produto.id})">Ver Detalhes</button>`;
-
-    if (usuario && usuario.email === produto.vendedorEmail) {
-      botaoAcao += `<button onclick="removerProduto(${produto.id})" style="background: linear-gradient(to bottom, #ff5555, #cc0000); margin-top: 5px;">Excluir Anúncio</button>`;
-    }
-
-    card.innerHTML = `
-      <img src="${produto.imagem}" alt="${produto.nome}">
-      <h3>${produto.nome}</h3>
-      <p>R$ ${produto.preco.toFixed(2)}</p>
-      ${botaoAcao}
-    `;
-    productListEl.appendChild(card);
-  });
+async function loadProfile() {
+  try {
+    const user = await apiRequest('/auth/me');
+    const fields = { 'perfil-nome': user.name, 'perfil-telefone': user.telephone, 'perfil-estado': user.state,
+      'perfil-cidade': user.city, 'perfil-bairro': user.neighborhood, 'perfil-genero': user.gender };
+    Object.keys(fields).forEach((id) => { const element = document.getElementById(id); if (element) element.value = fields[id] || ''; });
+  } catch (error) { alert(error.message); }
 }
 
-function renderizarMeusProdutos(): void {
-  const myProductsListEl = document.getElementById("my-products-list");
-  if (!myProductsListEl) return;
+async function renderProducts() {
+  try {
+    const products = await apiRequest('/products');
+    const list = document.getElementById('product-list');
+    const myList = document.getElementById('my-products-list');
+    const user = getCurrentUser();
+    if (list) list.innerHTML = products.length ? products.map((product) => {
+      const owns = user && Number(user.id) === Number(product.sellerId);
+      return `<div class="product-card"><img src="${escapeHtml(product.imageUrl || '')}" alt="${escapeHtml(product.name)}"><h3>${escapeHtml(product.name)}</h3><p>R$ ${money(product.price)}</p><button onclick="irParaDetalhes(${Number(product.id)})">Ver Detalhes</button>${owns ? `<button onclick="removerProduto(${Number(product.id)})" style="margin-top:5px;background:#c83e59;color:white">Excluir Anúncio</button>` : ''}</div>`;
+    }).join('') : '<p class="empty-msg">Nenhum produto anunciado no momento.</p>';
+    if (myList) {
+      const mine = products.filter((product) => user && Number(user.id) === Number(product.sellerId));
+      myList.innerHTML = mine.length ? mine.map((product) => `<div class="product-card"><img src="${escapeHtml(product.imageUrl || '')}" alt="${escapeHtml(product.name)}"><h3>${escapeHtml(product.name)}</h3><p>R$ ${money(product.price)}</p><button onclick="removerProduto(${Number(product.id)})" style="background:#c83e59;color:white">Excluir Anúncio</button></div>`).join('') : '<p class="empty-msg">Não há produtos anunciados por enquanto.</p>';
+    }
+  } catch (error) { showMessage(document.getElementById('product-list'), error.message); }
+}
+window.irParaDetalhes = function (id) { localStorage.setItem(SELECTED_PRODUCT_KEY, String(id)); window.location.href = 'produto.html'; };
+window.removerProduto = async function (id) {
+  if (!confirm('Excluir este anúncio?')) return;
+  try { await apiRequest(`/products/${id}`, { method: 'DELETE' }); await renderProducts(); alert('Produto removido.'); }
+  catch (error) { alert(error.message); }
+};
 
-  const produtos = getProdutos();
-  const usuario = getUsuarioLogado();
-  if (!usuario) return;
+async function updateCart() {
+  const itemsEl = document.getElementById('cart-items');
+  if (!itemsEl) return;
+  try {
+    const cart = await apiRequest('/cart');
+    const count = document.getElementById('cart-count');
+    const total = document.getElementById('cart-total');
+    const finish = document.getElementById('btn-finalizar');
+    if (count) count.innerText = cart.totalItems;
+    if (total) total.innerText = money(cart.total);
+    if (finish) finish.style.display = cart.items.length ? 'block' : 'none';
+    itemsEl.innerHTML = cart.items.length ? cart.items.map((item) => `<li style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span>${escapeHtml(item.product.name)} (x${item.quantity}) - R$ ${money(item.subtotal)}</span><button onclick="removerItemCarrinho(${Number(item.product.id)})" title="Remover item">Remover</button></li>`).join('') : '<li>O carrinho está vazio!</li>';
+  } catch (error) { showMessage(itemsEl, error.message); }
+}
+window.adicionarAoCarrinho = async function (id) {
+  try { await apiRequest('/cart/items', { method: 'POST', body: JSON.stringify({ productId: Number(id), quantity: 1 }) }); await updateCart(); alert('Produto adicionado ao carrinho!'); }
+  catch (error) { alert(error.message); }
+};
+window.adicionarAoCarrinhoERetornar = async function (id) {
+  try { await apiRequest('/cart/items', { method: 'POST', body: JSON.stringify({ productId: Number(id), quantity: 1 }) }); window.location.href = 'loja.html'; }
+  catch (error) { alert(error.message); }
+};
+window.removerItemCarrinho = async function (id) {
+  try { await apiRequest(`/cart/items/${id}`, { method: 'DELETE' }); await updateCart(); }
+  catch (error) { alert(error.message); }
+};
+window.finalizarCompra = async function () {
+  try {
+    const cart = await apiRequest('/cart');
+    if (!cart.items.length) { alert('O seu carrinho está vazio!'); return; }
+    alert('Carrinho limpo. A finalização/pagamento real ainda não está implementada.');
+    await apiRequest('/cart', { method: 'DELETE' }); await updateCart();
+  } catch (error) { alert(error.message); }
+};
 
-  const meusProdutos = produtos.filter(p => p.vendedorEmail === usuario.email);
-
-  if (meusProdutos.length === 0) {
-    myProductsListEl.innerHTML = `<p class="empty-msg">Não há produtos anunciados por enquanto.</p>`;
-    return;
-  }
-
-  myProductsListEl.innerHTML = "";
-  meusProdutos.forEach(produto => {
-    const card = document.createElement("div");
-    card.className = "product-card";
-    card.innerHTML = `
-      <img src="${produto.imagem}" alt="${produto.nome}">
-      <h3>${produto.nome}</h3>
-      <p>R$ ${produto.preco.toFixed(2)}</p>
-      <button onclick="removerProduto(${produto.id})" style="background: linear-gradient(to bottom, #ff5555, #cc0000);">Excluir Anúncio</button>
-    `;
-    myProductsListEl.appendChild(card);
-  });
+async function initializeProductPage() {
+  const container = document.getElementById('detalhe-produto');
+  const id = localStorage.getItem(SELECTED_PRODUCT_KEY);
+  if (!container || !id) { if (container) container.innerHTML = '<p class="empty-msg">Produto não encontrado.</p>'; return; }
+  try {
+    const product = await apiRequest(`/products/${encodeURIComponent(id)}`);
+    const user = getCurrentUser();
+    const isOwner = user && Number(user.id) === Number(product.sellerId);
+    const action = isOwner ? '<p style="margin-top:15px;font-weight:bold">Este produto é seu. Você não pode comprar o próprio anúncio.</p>'
+      : `<button onclick="adicionarAoCarrinhoERetornar(${Number(product.id)})" class="glow-btn">Adicionar ao carrinho</button>`;
+    container.innerHTML = `<img src="${escapeHtml(product.imageUrl || '')}" alt="${escapeHtml(product.name)}" style="max-width:100%;height:280px;object-fit:cover;border-radius:8px;margin-bottom:20px"><h2>${escapeHtml(product.name)}</h2><p>R$ ${money(product.price)}</p><p>Categoria: ${escapeHtml(product.category)}</p><p>Anunciado por usuário #${Number(product.sellerId)}</p>${action}`;
+  } catch (error) { container.innerHTML = `<p class="empty-msg">${escapeHtml(error.message)}</p>`; }
 }
 
-(window as any).irParaDetalhes = function(idProduto: number): void {
-  localStorage.setItem("midori_produto_selecionado", idProduto.toString());
-  window.location.href = "produto.html";
-};
-
-(window as any).finalizarCompra = function(): void {
-  const carrinho = getCarrinho();
-  if (carrinho.length === 0) {
-    alert("O seu carrinho está vazio!");
-    return;
-  }
-  alert("Compra finalizada com sucesso! Agora é só aproveitar a compra 🎸");
-  localStorage.removeItem("midori_carrinho");
-  atualizarCarrinho();
-};
-
-(window as any).removerProduto = function(idProduto: number): void {
-  let produtos = getProdutos();
-  produtos = produtos.filter(p => p.id !== idProduto);
-  salvarProdutos(produtos);
-  renderizarProdutos();
-  renderizarMeusProdutos();
-  alert("Produto removido com sucesso!");
-};
-
-(window as any).adicionarAoCarrinho = function(idProduto: number): void {
-  const produtos = getProdutos();
-  const usuario = getUsuarioLogado();
-  const produtoEncontrado = produtos.find(p => p.id === idProduto);
-
-  if (!produtoEncontrado || !usuario) return;
-
-  if (usuario.email === produtoEncontrado.vendedorEmail) {
-    alert("Você não pode adicionar o seu próprio produto ao carrinho.");
-    return;
-  }
-
-  const carrinho = getCarrinho();
-  const itemExistente = carrinho.find(item => item.produto.id === idProduto);
-
-  if (itemExistente) {
-    itemExistente.quantidade += 1;
-  } else {
-    carrinho.push({ produto: produtoEncontrado, quantidade: 1 });
-  }
-
-  salvarCarrinho(carrinho);
-  atualizarCarrinho();
-};
-
-(window as any).removerItemCarrinho = function(idProduto: number): void {
-  let carrinho = getCarrinho();
-  carrinho = carrinho.filter(item => item.produto.id !== idProduto);
-  salvarCarrinho(carrinho);
-  atualizarCarrinho();
-};
-
-function atualizarCarrinho(): void {
-  const cartCountEl = document.getElementById("cart-count");
-  const cartTotalEl = document.getElementById("cart-total");
-  const cartItemsEl = document.getElementById("cart-items");
-  const btnFinalizar = document.getElementById("btn-finalizar") as HTMLButtonElement;
-  const carrinho = getCarrinho();
-
-  const totalItens = carrinho.reduce((acc, item) => acc + item.quantidade, 0);
-  const valorTotal = carrinho.reduce((acc, item) => acc + (item.produto.preco * item.quantidade), 0);
-
-  if (cartCountEl) cartCountEl.innerText = totalItens.toString();
-  if (cartTotalEl) cartTotalEl.innerText = valorTotal.toFixed(2);
-
-  if (cartItemsEl) {
-    cartItemsEl.innerHTML = "";
-
-    if (carrinho.length === 0) {
-      cartItemsEl.innerHTML = "<li>O carrinho está vazio!</li>";
-      if (btnFinalizar) btnFinalizar.style.display = "none";
-      return;
-    }
-
-    if (btnFinalizar) btnFinalizar.style.display = "block";
-
-    carrinho.forEach(item => {
-      const li = document.createElement("li");
-      li.style.display = "flex";
-      li.style.justifyContent = "space-between";
-      li.style.alignItems = "center";
-      li.style.marginBottom = "8px";
-
-      li.innerHTML = `
-        <span>${item.produto.nome} (x${item.quantidade}) - R$ ${(item.produto.preco * item.quantidade).toFixed(2)}</span>
-        <button onclick="removerItemCarrinho(${item.produto.id})" style="background: #ff5555; border: none; color: white; padding: 2px 6px; border-radius: 4px; cursor: pointer;" title="Remover item">❌</button>
-      `;
-      cartItemsEl.appendChild(li);
-    });
-  }
-}
-
-// Lógica da tela de login (`index.html`)
-function inicializarAuth(): void {
-  const tabLogin = document.getElementById("tab-login");
-  const tabRegister = document.getElementById("tab-register");
-  const formLogin = document.getElementById("form-login") as HTMLFormElement;
-  const formRegister = document.getElementById("form-register") as HTMLFormElement;
-  const authMsg = document.getElementById("auth-message");
-
-  tabLogin?.addEventListener("click", () => {
-    tabLogin.classList.add("active");
-    tabRegister?.classList.remove("active");
-    formLogin?.classList.add("active");
-    formRegister?.classList.remove("active");
-    if (authMsg) authMsg.innerText = "";
-  });
-
-  tabRegister?.addEventListener("click", () => {
-    tabRegister.classList.add("active");
-    tabLogin?.classList.remove("active");
-    formRegister?.classList.add("active");
-    formLogin?.classList.remove("active");
-    if (authMsg) authMsg.innerText = "";
-  });
-
-  formRegister?.addEventListener("submit", (e) => {
-    e.preventDefault();
-
-    const usuarios = getUsuarios();
-    const nome = (document.getElementById("reg-name") as HTMLInputElement).value;
-    const email = (document.getElementById("reg-email") as HTMLInputElement).value;
-    const senha = (document.getElementById("reg-password") as HTMLInputElement).value;
-    const confirmarSenha = (document.getElementById("reg-confirm-password") as HTMLInputElement).value;
-    const role = (document.getElementById("reg-role") as HTMLSelectElement).value as 'comprador' | 'vendedor';
-
-    if (senha !== confirmarSenha) {
-      if (authMsg) authMsg.innerText = "As senhas não coincidem!";
-      return;
-    }
-
-    if (usuarios.find(u => u.email === email)) {
-      if (authMsg) authMsg.innerText = "Este e-mail já está cadastrado!";
-      return;
-    }
-
-    usuarios.push({ nome, email, senha, role });
-    salvarUsuarios(usuarios);
-    alert("Conta criada com sucesso! Faça login para continuar.");
-    formRegister.reset();
-    tabLogin?.click();
-  });
-
-  formLogin?.addEventListener("submit", (e) => {
-    e.preventDefault();
-
-    const usuarios = getUsuarios();
-    const email = (document.getElementById("login-email") as HTMLInputElement).value;
-    const senha = (document.getElementById("login-password") as HTMLInputElement).value;
-
-    const user = usuarios.find(u => u.email === email && u.senha === senha);
-
-    if (!user) {
-      if (authMsg) authMsg.innerText = "E-mail ou senha incorretos!";
-      return;
-    }
-
-    localStorage.setItem("midori_usuario_logado", JSON.stringify(user));
-    window.location.href = "loja.html";
-  });
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-  if (document.getElementById("form-login")) {
-    inicializarAuth();
-  } else if (document.getElementById("user-badge")) {
-    inicializarLoja();
-  }
+document.addEventListener('DOMContentLoaded', () => {
+  if (document.getElementById('form-login')) initializeAuth();
+  if (document.getElementById('user-badge')) initializeShop();
+  if (document.getElementById('detalhe-produto')) initializeProductPage();
 });
